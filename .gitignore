@@ -1,0 +1,33 @@
+# 运行期数据（Docker 卷挂载点，不入库）
+home/
+workspace/
+
+# 通用
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.bak
+*.tmp
+
+# 敏感配置
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# 构建产物
+build/
+dist/
+*.tar.gz
+*.deb
+
+# 凭据
+*.pem
+*.key
+credentials.json
