@@ -40,7 +40,7 @@ if [ ! -f /home/coder/.local/share/code-server/User/settings.json ]; then
     },
     "workbench.startupEditor": "none",
     "telemetry.telemetryLevel": "off",
-    "files.dialog.defaultPath": "/home/coder/workspace",
+    "files.dialog.defaultPath": "/",
     "update.mode": "none"
 }
 JSON
