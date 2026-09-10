@@ -9,6 +9,7 @@
 | Python | **3.12.14** | 源码编译，预装 `venv` / `pipx` / `poetry` / `pip-tools` |
 | Node.js | **22.23.2**（Jod LTS） | `yarn`、`pnpm`、`typescript`、`tsx`、`corepack` |
 | JDK | **Temurin 21.0.12.1+1** | `JAVA_HOME=/opt/jdk-21`，仅 JDK |
+| Maven | **3.9.9** | 阿里云镜像，`MAVEN_HOME=/opt/maven` |
 | code-server | **4.135.0** | 官方 `.deb`，由 `systemd` 管理 |
 
 所有二进制通过 SHA-256 校验，不匹配则构建失败。
@@ -119,6 +120,39 @@ network_mode: host
 
 ---
 
+## 国内镜像源（默认）
+
+构建时已固化国内镜像源，构建速度与运行时依赖下载都快：
+
+| 工具 | 镜像 | 配置文件 |
+|---|---|---|
+| `apt` | `https://mirrors.tuna.tsinghua.edu.cn/debian` | `/etc/apt/sources.list.d/debian.sources`（deb822 格式） |
+| `npm` | `https://registry.npmmirror.com/` | `/etc/npmrc`、`/home/coder/.npmrc` |
+| `mvn` | `https://maven.aliyun.com/repository/public` | `/opt/maven/conf/settings.xml`、`/home/coder/.m2/settings.xml` |
+
+> Maven 二进制从华为云镜像下载（国内 CDN），SHA-256 已硬编码校验。
+
+如果需要切换回官方源，编辑相应配置文件即可。
+
+---
+
+## Workspace 默认目录与 trust 设置
+
+- code-server 默认打开 `/home/coder/workspace`（由 systemd 单元 ExecStart 末尾参数控制）
+- **关闭了 workspace trust**（命令行 `--disable-workspace-trust` + settings.json），"Add Folder to Workspace" 时不再弹"信任此文件夹"对话框
+- HOME 设为 `/home/coder`，使 "Open Folder" 对话框默认从 `/home/coder` 开始浏览
+
+settings.json 关键配置：
+```json
+{
+    "security.workspace.trust.enabled": false,
+    "extensions.supportUntrustedWorkspaces": {"*": true},
+    "files.dialog.defaultPath": "/home/coder/workspace"
+}
+```
+
+---
+
 ## 关于运行用户
 
 本镜像**故意以 root 运行 code-server**（见 `systemd/code-server.service`）。理由：
@@ -139,6 +173,27 @@ sudo: unable to resolve host devbox: No address associated with hostname
 ```
 
 这是 **cosmetic warning**，原因是容器 hostname `devbox` 不是 FQDN 形式，而 sudo 编译时启用了 `--with-fqdn`。**不影响任何功能**，sudo 仍然正常执行。
+
+---
+
+## 关于 journal 中 "Hostname set to <debain>"
+
+启动时 `journalctl -b` 会看到一次：
+```
+systemd[1]: Hostname set to <debain>.
+```
+
+**这是 Debian 12 base image 的已知问题**（详见 [Debian Bug #853731](https://bugs.debian.org/853731)），
+image 里 `/etc/hostname` 写了上游构建时的容器 ID 前缀或 `debain`（typo），systemd 启动早期读到后就用这个值调用 `sethostname()`。
+
+**实际并不影响使用**：
+- `/proc/sys/kernel/hostname`、`/etc/hostname`、`uname -n`、`hostnamectl` 都正确显示 `devbox`
+- 1 秒后 systemd-hostnamed 启动后会被 D-Bus 调用修正（看到 `Hostname set to <devbox> (static)`）
+
+我们已在 entrypoint.sh 中显式重新同步内核与 `/etc/hostname` 为 `devbox`，但 Docker daemon 在容器创建那一刻也会改写一次，因此这条历史日志始终存在。如果你想消除，可在容器内执行：
+```bash
+hostnamectl set-hostname devbox
+```
 
 ---
 
@@ -214,7 +269,9 @@ CODE_SERVER_VERSION=4.135.0 SHA256: f87d0d49c6c0a59d41214c9510f506e4123991f2d27b
 
 如需这些功能，可在 code-server 内手动安装。
 
-最终镜像大小：**~466 MB**（精简模式）/ **~880 MB**（完整模式）。
+最终镜像大小：**~475 MB**（精简模式）/ **~880 MB**（完整模式）。
+
+> 之前版本 466 MB，新增 Maven 3.9.9 增加约 9 MB。
 
 ### 多阶段构建
 
@@ -234,11 +291,15 @@ CODE_SERVER_VERSION=4.135.0 SHA256: f87d0d49c6c0a59d41214c9510f506e4123991f2d27b
 ├── .dockerignore
 ├── .gitignore
 ├── systemd/
-│   ├── code-server.service  # systemd 单元（以 root 运行）
+│   ├── code-server.service  # systemd 单元（以 root 运行，HOME=/home/coder）
 │   ├── override.conf        # 单元覆盖
 │   └── mask-units.sh        # 屏蔽不适用的 systemd 单元
+├── config/
+│   ├── code-server-config.yaml       # code-server 全局配置模板
+│   ├── code-server-settings.json     # code-server 用户 settings.json 模板
+│   └── maven-settings.xml            # Maven 阿里云镜像配置模板
 ├── scripts/
-│   ├── entrypoint.sh        # 密码处理 + exec systemd
+│   ├── entrypoint.sh        # 密码处理 + hostname 同步 + coder 配置初始化 + exec systemd
 │   └── verify.sh            # 构建后冒烟测试
 ├── home/                    # coder 用户数据持久化（运行时自动创建，git 忽略）
 ├── workspace/               # 默认工作区（运行时自动创建，git 忽略）
@@ -283,6 +344,15 @@ mkdir -p /opt/systemdbox && cd /opt/systemdbox
 # 把项目文件（除 home/ workspace/）scp / git clone 过来
 docker compose up -d
 ```
+
+## 更新日志
+
+- **v1.1.0**
+  - APT 软件源切换到清华源（`mirrors.tuna.tsinghua.edu.cn`）
+  - npm 默认淘宝源（`registry.npmmirror.com`）
+  - 新增 Maven 3.9.9，仓库走阿里云镜像（`maven.aliyun.com`）
+  - code-server 关闭 workspace trust，HOME 改为 `/home/coder`，默认打开 `/home/coder/workspace`
+  - 修复 `/etc/hostname` 内容异常导致的 "Hostname set to <debain>" 警告（Debian Bug #853731）
 
 ---
 

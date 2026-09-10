@@ -21,8 +21,10 @@ docker exec "${CONTAINER}" bash -c '
     echo "npm    : $(npm --version 2>&1)"
     echo "Java   : $(java -version 2>&1 | head -1)"
     echo "javac  : $(javac -version 2>&1)"
+    echo "Maven  : $(mvn --version 2>&1 | head -1)"
     echo "code-server : $(code-server --version 2>&1 | head -1)"
     echo "systemd PID 1 : $(cat /proc/1/comm)"
+    echo "hostname : $(hostname)"
 '
 
 echo
@@ -36,7 +38,18 @@ echo
 echo "==> 健康检查"
 docker exec "${CONTAINER}" bash -c '
     code-server --version >/dev/null
-    curl -fsS -o /dev/null -w "GET /healthz -> %{http_code}\n" http://127.0.0.1:8080/healthz || true
+    curl -fsS -o /dev/null -w "GET /healthz -> %{http_code}\n" http://127.0.0.1:8443/healthz || true
+'
+
+echo
+echo "==> 国内镜像源验证"
+docker exec "${CONTAINER}" bash -c '
+    echo "apt 清华源:"
+    grep -m1 "URIs:" /etc/apt/sources.list.d/debian.sources
+    echo "npm 淘宝源:"
+    grep "registry" /home/coder/.npmrc | head -1
+    echo "Maven 阿里云:"
+    grep -A1 "<name>" /home/coder/.m2/settings.xml | head -3
 '
 
 echo

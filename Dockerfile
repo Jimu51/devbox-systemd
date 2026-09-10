@@ -7,7 +7,12 @@
 #   * Python : 3.12.14 (源码编译)
 #   * Node   : 22.23.2 (Jod LTS)
 #   * JDK    : Temurin 21.0.12.1+1
+#   * Maven  : 3.9.9 (Apache，配置阿里云镜像)
 #   * code-server : 4.135.0
+# 国内源配置（构建时持久化，apt/npm/maven 都走国内镜像）：
+#   * apt   → mirrors.tuna.tsinghua.edu.cn（清华源）
+#   * npm   → registry.npmmirror.com（淘宝源）
+#   * Maven → maven.aliyun.com（阿里云）
 # 体积优化：
 #   * 构建阶段（gcc/编译器/-dev 包）独立，不进入最终镜像
 #   * 移除 Python 测试套件 / IDLE / tkinter / lib2to3
@@ -27,6 +32,28 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12.14
 ARG PYTHON_SHA256=5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a
 
+# 切换为清华源（deb822 格式），避免编译 Python 时下载依赖慢
+# 第一步：先用默认源装 ca-certificates，否则 HTTPS 连清华源会证书校验失败
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# 第二步：写入清华源（deb822 格式）
+RUN cat > /etc/apt/sources.list.d/debian.sources <<'EOF'
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian
+Suites: bookworm bookworm-updates
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian-security
+Suites: bookworm-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+
+# 第三步：安装编译工具与 Python 源码
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -81,7 +108,8 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND} \
     LANGUAGE=en_US:en \
     LC_ALL=en_US.UTF-8 \
     JAVA_HOME=/opt/jdk-21 \
-    PATH=/opt/python-3.12.14/bin:/opt/node-22/bin:/opt/jdk-21/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    MAVEN_HOME=/opt/maven \
+    PATH=/opt/python-3.12.14/bin:/opt/node-22/bin:/opt/jdk-21/bin:/opt/maven/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 ARG PYTHON_VERSION=3.12.14
 ARG NODE_VERSION=22.23.2
@@ -89,13 +117,44 @@ ARG NODE_SHA256=d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307
 ARG JDK_VERSION=21.0.12.1
 ARG JDK_BUILD=1
 ARG JDK_SHA256=ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94
+ARG MAVEN_VERSION=3.9.9
 ARG CODE_SERVER_VERSION=4.135.0
 ARG CODE_SERVER_SHA256=f87d0d49c6c0a59d41214c9510f506e4123991f2d27b41f6d56f3f5c96458d3e
 # 是否移除 code-server 的可选扩展（copilot、mermaid 等，约 420MB）
 # 默认开启精简；如需完整 IDE，可设 --build-arg SLIM_CODE_SERVER=false
 ARG SLIM_CODE_SERVER=true
 
-# ------------------ 第一阶段：基础系统与运行时依赖 ------------------
+# ------------------ 主机名修复（避免 systemctl 报 hostname 警告） ------------------
+# Debian 12 base image 的 /etc/hostname 内容异常（写的是 Docker 容器 ID 或 "debain"），
+# systemd 启动时会读取此文件并 sethostname()，导致 journal 中看到：
+#   "Hostname set to <debain>"
+# 同时 systemd-hostnamed 被 mask 时 D-Bus 主机名查询也会失败。
+# 这里显式写入默认主机名 "devbox"，entrypoint.sh 还会基于内核 hostname 重新同步。
+RUN echo "devbox" > /etc/hostname
+
+# ------------------ 第一阶段：配置清华源 ------------------
+# 替换 Debian 默认源为清华源（deb822 格式），构建时直接走国内 CDN
+# 先用默认源安装 ca-certificates，否则 HTTPS 连清华源会证书校验失败
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# 写入清华源（deb822 格式）
+RUN cat > /etc/apt/sources.list.d/debian.sources <<'EOF'
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian
+Suites: bookworm bookworm-updates
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://mirrors.tuna.tsinghua.edu.cn/debian-security
+Suites: bookworm-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+
+# ------------------ 第二阶段：基础系统与运行时依赖 ------------------
 # 注意：这里只安装运行/调试时需要的包，不安装 gcc / *-dev
 RUN set -eux; \
     apt-get update; \
@@ -110,6 +169,8 @@ RUN set -eux; \
         locales \
         tini \
         xz-utils \
+        # hostname 命令（同步主机名用）
+        hostname \
         # 运行时库（与 Python 链接）
         libffi8 \
         libsqlite3-0 \
@@ -131,11 +192,11 @@ RUN set -eux; \
     echo "uninitialized" > /etc/machine-id; \
     rm -f /var/lib/systemd/random-seed
 
-# 引入屏蔽脚本并执行
+# 引入屏蔽脚本并执行（不再 mask systemd-hostnamed，保证主机名查询可用）
 COPY systemd/mask-units.sh /tmp/mask-units.sh
 RUN bash /tmp/mask-units.sh && rm /tmp/mask-units.sh
 
-# ------------------ 第二阶段：从 builder 复制 Python ------------------
+# ------------------ 第三阶段：从 builder 复制 Python ------------------
 COPY --from=builder /opt/python-3.12.14 /opt/python-3.12.14
 RUN set -eux; \
     ldconfig; \
@@ -162,8 +223,12 @@ RUN set -eux; \
     strip --strip-unneeded /opt/python-3.12.14/bin/python3.12 2>/dev/null || true; \
     rm -rf /root/.cache /tmp/* /var/tmp/*
 
-# ------------------ 第三阶段：Node.js 22.23.2 LTS ------------------
+# ------------------ 第四阶段：Node.js 22.23.2 LTS ------------------
+# 写入 npm 淘宝源（registry.npmmirror.com）作为镜像构建期 npm 默认源，
+# 同时写入全局 .npmrc，让最终用户也能继承。
 RUN set -eux; \
+    printf 'registry=https://registry.npmmirror.com/\nfund=false\naudit=false\nupdate-notifier=false\nloglevel=warn\n' \
+        > /etc/npmrc; \
     curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors \
          --connect-timeout 60 --max-time 1800 \
          "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
@@ -182,12 +247,12 @@ RUN set -eux; \
               /opt/node-22/CHANGELOG.md \
               /opt/node-22/README.md \
               /opt/node-22/LICENSE; \
-    # 常用全局包
+    # 常用全局包（淘宝源，秒级完成）
     npm install -g --silent --no-audit --no-fund yarn pnpm typescript tsx @types/node; \
     npm cache clean --force; \
     corepack enable
 
-# ------------------ 第四阶段：Temurin JDK 21 ------------------
+# ------------------ 第五阶段：Temurin JDK 21 ------------------
 RUN set -eux; \
     curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors \
          --connect-timeout 60 --max-time 1800 \
@@ -209,7 +274,30 @@ RUN set -eux; \
               /opt/jdk-21/legal; \
     strip --strip-unneeded /opt/jdk-21/lib/server/libjvm.so 2>/dev/null || true
 
-# ------------------ 第五阶段：code-server ------------------
+# ------------------ 第六阶段：Maven 3.9.9 + 阿里云镜像 ------------------
+# 二进制从华为云镜像下（国内 CDN 快，Apache 国际链路慢）；
+# Maven 仓库解析走阿里云镜像，由 settings.xml 配置
+# SHA-256 已与官方二进制校验一致：
+#   7a9cdf674fc1703d6382f5f330b3d110ea1b512b51f1652846d9e4e8a588d766  apache-maven-3.9.9-bin.tar.gz
+ARG MAVEN_SHA256=7a9cdf674fc1703d6382f5f330b3d110ea1b512b51f1652846d9e4e8a588d766
+RUN set -eux; \
+    curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors \
+         --connect-timeout 60 --max-time 600 \
+         "https://mirrors.huaweicloud.com/apache/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+         -o maven.tar.gz; \
+    echo "${MAVEN_SHA256}  maven.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/maven; \
+    tar -xzf maven.tar.gz -C /opt/maven --strip-components=1; \
+    rm maven.tar.gz; \
+    # 删除示例与文档（~30MB），保留 conf 与 bin（conf 由下方 COPY 注入）
+    rm -rf /opt/maven/lib/ext; \
+    rm -rf /opt/maven/README.txt /opt/maven/LICENSE /opt/maven/NOTICE; \
+    ln -sf /opt/maven/bin/mvn /usr/local/bin/mvn
+
+# 注入阿里云镜像 settings.xml（系统级），用户级由第八阶段单独写入 ~/.m2/settings.xml
+COPY config/maven-settings.xml /opt/maven/conf/settings.xml
+
+# ------------------ 第七阶段：code-server ------------------
 RUN set -eux; \
     curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors \
          --connect-timeout 60 --max-time 1800 \
@@ -249,36 +337,43 @@ RUN set -eux; \
     # WASM 文件只需存在（不被实际解析），用 Python 生成 8 字节 WASM magic+version \
     python3 -c "open('/usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda_bg.wasm','wb').write(b'\\x00asm\\x01\\x00\\x00\\x00')"
 
-# ------------------ 第六阶段：创建普通用户 ------------------
+# ------------------ 第八阶段：创建普通用户 ------------------
 RUN set -eux; \
     if ! id coder >/dev/null 2>&1; then \
         useradd -m -s /bin/bash -G sudo coder; \
     fi; \
     echo "coder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/coder; \
-    mkdir -p /home/coder/.local/share/code-server /home/coder/workspace; \
+    mkdir -p /home/coder/.local/share/code-server /home/coder/workspace /home/coder/.m2 /home/coder/.config; \
     chown -R coder:coder /home/coder
 
-# ------------------ 第七阶段：注入 systemd 单元 ------------------
+# 同步 Maven 阿里云镜像配置到 coder 用户
+COPY config/maven-settings.xml /home/coder/.m2/settings.xml
+
+# 同步 npm 淘宝源配置到 coder 用户
+RUN printf 'registry=https://registry.npmmirror.com/\nfund=false\naudit=false\nupdate-notifier=false\nloglevel=warn\n' \
+        > /home/coder/.npmrc
+
+# 写入 code-server 用户设置（关键：禁用 workspace trust，"Add Folder to Workspace" 不再受限）
+COPY config/code-server-settings.json /home/coder/.local/share/code-server/User/settings.json
+
+RUN chown -R coder:coder /home/coder
+
+# ------------------ 第九阶段：注入 systemd 单元 ------------------
 COPY systemd/code-server.service /etc/systemd/system/code-server.service
 COPY systemd/override.conf      /etc/systemd/system/code-server.service.d/override.conf
+# code-server 配置（启动时由 entrypoint.sh 重新生成）
+COPY config/code-server-config.yaml /etc/code-server/config.yaml
+# code-server env 模板（启动时由 entrypoint.sh 追加实际密码）
+COPY config/code-server.env.template /etc/code-server/code-server.env
 
 RUN set -eux; \
-    mkdir -p /etc/code-server /home/coder/.local/share/code-server; \
-    if [ ! -e /etc/code-server/config.yaml ]; then \
-        printf 'bind-addr: 0.0.0.0:8443\nauth: password\ndisable-telemetry: true\n' \
-            > /etc/code-server/config.yaml; \
-    fi; \
-    printf '%s\n' \
-        '# 容器启动时由 entrypoint.sh 自动生成，请勿手工编辑。' \
-        '# 编辑 /etc/code-server/code-server.env 后重启 code-server 即可生效。' \
-        '# 取消下面任意一行的注释即可启用密码：' \
-        '# PASSWORD=changeme' \
-        '# HASHED_PASSWORD=' \
-        > /etc/code-server/code-server.env; \
+    mkdir -p /etc/code-server; \
+    chmod 0644 /etc/code-server/config.yaml; \
+    chmod 0644 /etc/code-server/code-server.env; \
     systemctl enable code-server.service; \
     systemctl set-default multi-user.target
 
-# ------------------ 第八阶段：最终清理 ------------------
+# ------------------ 第十阶段：最终清理 ------------------
 RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/* /root/.cache

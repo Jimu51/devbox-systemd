@@ -1,0 +1,12 @@
+{
+    "security.workspace.trust.enabled": false,
+    "security.workspace.trust.banner": "never",
+    "security.workspace.trust.emptyWindow": true,
+    "extensions.supportUntrustedWorkspaces": {
+        "*": true
+    },
+    "workbench.startupEditor": "none",
+    "telemetry.telemetryLevel": "off",
+    "files.dialog.defaultPath": "/home/coder/workspace",
+    "update.mode": "none"
+}

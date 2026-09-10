@@ -11,18 +11,25 @@ Type=simple
 # 因此直接用 root 简化权限管理（详见 README）
 User=root
 Group=root
-WorkingDirectory=/root
-# 环境变量：code-server 与 HOME 相关
-Environment=HOME=/root
-Environment=XDG_DATA_HOME=/root/.local/share
-Environment=XDG_CONFIG_HOME=/root/.config
-# 启动命令：监听所有网卡 8443，禁用遥测
+# 工作目录切到 /home/coder（coder 用户主目录，挂载点），
+# 使 "Open Folder" 对话框默认从这里开始，便于添加任意子目录到工作区
+WorkingDirectory=/home/coder
+# HOME 必须与 user-data-dir / extension-dir 保持一致，
+# 否则 code-server 找不到 settings.json、扩展被装到错位置
+Environment=HOME=/home/coder
+Environment=XDG_DATA_HOME=/home/coder/.local/share
+Environment=XDG_CONFIG_HOME=/home/coder/.config
+# 启动命令：监听所有网卡 8443，禁用遥测/更新检查/workspace trust
+# 末尾的 /home/coder/workspace 是默认打开的目录（code-server 4.x 用位置参数）
 ExecStart=/usr/bin/code-server \
     --bind-addr 0.0.0.0:8443 \
-    --user-data-dir /root/.local/share/code-server \
-    --extensions-dir /root/.local/share/code-server/extensions \
+    --user-data-dir /home/coder/.local/share/code-server \
+    --extensions-dir /home/coder/.local/share/code-server/extensions \
     --config /etc/code-server/config.yaml \
-    --disable-telemetry
+    --disable-telemetry \
+    --disable-update-check \
+    --disable-workspace-trust \
+    /home/coder/workspace
 ExecStop=/bin/kill -TERM $MAINPID
 SuccessExitStatus=143
 

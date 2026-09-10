@@ -3,6 +3,10 @@
 # ------------------------------------------------------------
 # 容器中没有真实的控制台、终端、登录会话，
 # 屏蔽这些单元可加速启动并避免日志噪音。
+#
+# 注意：不再屏蔽 systemd-hostnamed（dbus-org.freedesktop.hostname1），
+# 否则 hostnamectl、D-Bus 主机名查询会失败，systemctl 也会提示 "hostname unset"。
+# 主机名同步由 entrypoint.sh 负责写入 /etc/hostname。
 # ============================================================
 
 #!/bin/bash
@@ -41,9 +45,9 @@ mask systemd-machine-id-setup.service
 mask systemd-firstboot.service
 
 # D-Bus 服务（容器内无桌面 / 用户会话）
+# 注意：保留 dbus-org.freedesktop.hostname1 不屏蔽，否则 hostnamectl 会失败
 mask dbus-org.freedesktop.login1.service
 mask dbus-org.freedesktop.timedate1.service
-mask dbus-org.freedesktop.hostname1.service
 mask dbus-org.freedesktop.locale1.service
 
 # 时间同步
