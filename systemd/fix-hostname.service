@@ -1,0 +1,36 @@
+[Unit]
+# 修复 Debian 官方 Docker image 的 /etc/hostname bug (Debian Bug #853731)
+# ----------------------------------------------------------------
+# 现象：镜像里 /etc/hostname 是空文件或带 "debain" typo（早期 Debian 11/12 镜像），
+# systemd PID 1 启动早期读到后会 sethostname() 写入错值，journal 出现：
+#   "Hostname set to <debain>." 或 "Hostname set to <container_id>."
+#
+# 修复：先写一次正确 hostname，再通过 hostnamectl 调用 systemd-hostnamed，
+# 让 hostnamectl 记录 "Hostname set to <devbox> (static)" 覆盖错误日志。
+# 同时也确保 /etc/hostname 与 kernel hostname 一致，避免 sudo --with-fqdn 警告。
+#
+# 之所以不用 entrypoint.sh：
+#   entrypoint.sh 写在 systemd 之前，但 Docker daemon 启动容器时会再次覆盖
+#   /etc/hostname（注入 <容器ID> 到 /etc/hosts 等）。systemd PID 1 早期会读到
+#   镜像里的默认值。需要在 systemd 启动早期通过 hostnamectl 强制覆盖。
+Description=Fix /etc/hostname and trigger systemd-hostnamed
+Documentation=https://bugs.debian.org/853731
+# 在 systemd-hostnamed 启动完成后再执行（避免 hostnamectl 等 25s 激活超时）
+After=systemd-hostnamed.service
+# 不要因为失败阻塞启动
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# 1. 从内核读 hostname → 写入 /etc/hostname（覆盖镜像里的 "debain"/空内容）
+# 2. 调用 hostnamectl set-hostname，触发 systemd-hostnamed 输出
+#    "Hostname set to <devbox> (static)" 覆盖 systemd PID 1 早期的错误日志
+ExecStart=/bin/bash -c '\
+  H="$(cat /proc/sys/kernel/hostname)"; \
+  [ -n "$H" ] || H="devbox"; \
+  echo "$H" > /etc/hostname; \
+  /usr/bin/hostnamectl set-hostname "$H" 2>&1 | head -5'
+
+[Install]
+RequiredBy=multi-user.target

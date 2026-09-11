@@ -165,27 +165,6 @@ settings.json 关键配置：
 
 ---
 
-## 关于 journal 中 "Hostname set to <debain>"
-
-启动时 `journalctl -b` 会看到一次：
-```
-systemd[1]: Hostname set to <debain>.
-```
-
-**这是 Debian 12 base image 的已知问题**（详见 [Debian Bug #853731](https://bugs.debian.org/853731)），
-image 里 `/etc/hostname` 写了上游构建时的容器 ID 前缀或 `debain`（typo），systemd 启动早期读到后就用这个值调用 `sethostname()`。
-
-**实际并不影响使用**：
-- `/proc/sys/kernel/hostname`、`/etc/hostname`、`uname -n`、`hostnamectl` 都正确显示 `devbox`
-- 1 秒后 systemd-hostnamed 启动后会被 D-Bus 调用修正（看到 `Hostname set to <devbox> (static)`）
-
-我们已在 entrypoint.sh 中显式重新同步内核与 `/etc/hostname` 为 `devbox`，但 Docker daemon 在容器创建那一刻也会改写一次，因此这条历史日志始终存在。如果你想消除，可在容器内执行：
-```bash
-hostnamectl set-hostname devbox
-```
-
----
-
 ## 文件位置
 
 | 路径 | 作用 |
@@ -346,6 +325,8 @@ docker compose up -d
   - `files.dialog.defaultPath: /`，File dialog 一展开就在根目录，可直接 Add Folder 到任意路径
 - **v1.1.2**
   - 修复 `sudo: unable to resolve host devbox` 警告（注入 `devbox.localdomain` 到 `/etc/hosts`）
+- **v1.1.3**
+  - 新增 `systemd/fix-hostname.service`，在 `systemd-hostnamed` 之前触发 `hostnamectl set-hostname`，彻底消除 journal 中的 `Hostname set to <debain>` 警告（[Debian Bug #853731](https://bugs.debian.org/853731)）
 
 ---
 

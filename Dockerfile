@@ -361,6 +361,8 @@ RUN chown -R coder:coder /home/coder
 # ------------------ 第九阶段：注入 systemd 单元 ------------------
 COPY systemd/code-server.service /etc/systemd/system/code-server.service
 COPY systemd/override.conf      /etc/systemd/system/code-server.service.d/override.conf
+# 修复 Debian 官方 Docker image /etc/hostname bug (Debian Bug #853731)
+COPY systemd/fix-hostname.service /etc/systemd/system/fix-hostname.service
 # code-server 配置（启动时由 entrypoint.sh 重新生成）
 COPY config/code-server-config.yaml /etc/code-server/config.yaml
 # code-server env 模板（启动时由 entrypoint.sh 追加实际密码）
@@ -371,6 +373,7 @@ RUN set -eux; \
     chmod 0644 /etc/code-server/config.yaml; \
     chmod 0644 /etc/code-server/code-server.env; \
     systemctl enable code-server.service; \
+    systemctl enable fix-hostname.service; \
     systemctl set-default multi-user.target
 
 # ------------------ 第十阶段：最终清理 ------------------
