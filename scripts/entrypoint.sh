@@ -77,6 +77,21 @@ fi
 chown -R coder:coder /home/coder 2>/dev/null || true
 
 # ============================================================
+# 修复 sudo "unable to resolve host devbox" 警告
+# ------------------------------------------------------------
+# Debian sudo 编译时启用了 --with-fqdn，会调用 gethostbyname() 解析
+# 当前 hostname 并要求返回 FQDN（带点的主机名）。容器内 hostname
+# 'devbox' 在 /etc/hosts 只有短名映射，sudo 会每次都报警告（不影响功能）。
+# 在 /etc/hosts 加一条 'devbox.localdomain devbox' → 127.0.1.1，
+# gethostbyname() 返回 'devbox.localdomain'（FQDN），警告消失。
+# Docker daemon 自动写入的 '172.19.0.2 devbox' 行保留，对其他程序无影响。
+# ============================================================
+if ! grep -qE '^[[:space:]]*127\.0\.1\.1[[:space:]]+.*\bdevbox\b' /etc/hosts 2>/dev/null; then
+    echo "127.0.1.1	devbox.localdomain	devbox" >> /etc/hosts
+    echo "[entrypoint] 已修复 sudo FQDN 警告（/etc/hosts 注入 devbox.localdomain）"
+fi
+
+# ============================================================
 # 主机名同步（修复 systemctl 报 "hostname unset" 的 bug）
 # ------------------------------------------------------------
 # Debian 12 base image 的 /etc/hostname 内容异常（容器 ID 或 "debain"），

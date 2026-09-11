@@ -165,17 +165,6 @@ settings.json 关键配置：
 
 ---
 
-## 关于 sudo "unable to resolve host"
-
-容器内执行 `sudo` 时可能看到：
-```
-sudo: unable to resolve host devbox: No address associated with hostname
-```
-
-这是 **cosmetic warning**，原因是容器 hostname `devbox` 不是 FQDN 形式，而 sudo 编译时启用了 `--with-fqdn`。**不影响任何功能**，sudo 仍然正常执行。
-
----
-
 ## 关于 journal 中 "Hostname set to <debain>"
 
 启动时 `journalctl -b` 会看到一次：
@@ -353,6 +342,10 @@ docker compose up -d
   - 新增 Maven 3.9.9，仓库走阿里云镜像（`maven.aliyun.com`）
   - code-server 关闭 workspace trust，HOME 改为 `/home/coder`，默认打开 `/home/coder/workspace`
   - 修复 `/etc/hostname` 内容异常导致的 "Hostname set to <debain>" 警告（Debian Bug #853731）
+- **v1.1.1**
+  - `files.dialog.defaultPath: /`，File dialog 一展开就在根目录，可直接 Add Folder 到任意路径
+- **v1.1.2**
+  - 修复 `sudo: unable to resolve host devbox` 警告（注入 `devbox.localdomain` 到 `/etc/hosts`）
 
 ---
 
