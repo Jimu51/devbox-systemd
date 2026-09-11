@@ -3,7 +3,7 @@
 # 镜像冒烟测试脚本
 # ------------------------------------------------------------
 # 用法：
-#   CONTAINER=devbox ./scripts/verify.sh
+#   CONTAINER=devbox-systemd ./scripts/verify.sh
 # 检查：
 #   1. 各组件版本
 #   2. systemd 运行状态
@@ -11,7 +11,7 @@
 # ============================================================
 set -eu
 
-CONTAINER="${CONTAINER:-devbox}"
+CONTAINER="${CONTAINER:-devbox-systemd}"
 
 echo "==> 组件版本"
 docker exec "${CONTAINER}" bash -c '

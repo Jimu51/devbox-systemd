@@ -1,4 +1,4 @@
-# systemdbox
+# devbox-systemd
 
 一个开箱即用的多语言开发容器镜像（systemd + Python + Node + JDK + code-server）。
 
@@ -23,7 +23,7 @@
 ```bash
 # 不设置密码：容器自动生成 16 位随机密码并打印到日志
 docker compose up -d
-docker logs devbox | grep -A 5 'code-server 密码已就绪'
+docker logs devbox-systemd | grep -A 5 'code-server 密码已就绪'
 
 # 推荐：显式设置明文密码
 PASSWORD='你的密码' docker compose up -d
@@ -38,20 +38,20 @@ HASHED_PASSWORD='argon2id 哈希值' docker compose up -d
 
 ```bash
 docker run -d \
-  --name devbox \
+  --name devbox-systemd \
   --privileged \
   --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
   -p 3443:8443 \
   -e PASSWORD='你的密码' \
-  devbox:latest
+  devbox-systemd:latest
 ```
 
 ### 进入容器
 
 ```bash
-docker exec -it devbox bash
-docker exec -it devbox systemctl list-units
+docker exec -it devbox-systemd bash
+docker exec -it devbox-systemd systemctl list-units
 ```
 
 ---
@@ -157,7 +157,7 @@ settings.json 关键配置：
 
 本镜像**故意以 root 运行 code-server**（见 `systemd/code-server.service`）。理由：
 
-- devbox 是个人本地开发容器，能登录 = 已是 root（coder 用户有 `NOPASSWD:ALL`）
+- devbox-systemd 是个人本地开发容器，能登录 = 已是 root（coder 用户有 `NOPASSWD:ALL`）
 - 因此直接以 root 运行简化权限模型，避免每次都要 `sudo`
 - 端口 3443 应只暴露给 localhost（不暴露公网）
 
@@ -173,7 +173,8 @@ settings.json 关键配置：
 | `/etc/code-server/code-server.env` | 由 entrypoint 生成，systemd 通过 `EnvironmentFile=` 读取 |
 | `/etc/systemd/system/code-server.service` | systemd 单元 |
 | `/etc/systemd/system/code-server.service.d/override.conf` | 单元覆盖（重启策略等） |
-| `/root/.local/share/code-server` | 用户数据、设置、扩展 |
+| `/etc/systemd/system/fix-hostname.service` | Debian Bug #853731 修复 |
+| `/home/coder/.local/share/code-server` | 用户数据、设置、扩展 |
 | `./home/`（宿主机） | 持久化目录（coder 用户数据） |
 | `./workspace/`（宿主机） | 工作区挂载点 |
 
@@ -191,7 +192,7 @@ settings.json 关键配置：
 ## 镜像验证
 
 ```bash
-CONTAINER=devbox ./scripts/verify.sh
+CONTAINER=devbox-systemd ./scripts/verify.sh
 ```
 
 依次检查：组件版本、`systemctl is-system-running`、code-server 状态、`/healthz` 端点。
@@ -202,13 +203,13 @@ CONTAINER=devbox ./scripts/verify.sh
 
 ```bash
 # 默认：精简模式（移除 code-server 内置 Copilot、Mermaid 等扩展）
-docker build -t devbox:latest .
+docker build -t devbox-systemd:latest .
 
 # 完整模式（保留所有内置扩展，~880 MB）
-docker build -t devbox:full --build-arg SLIM_CODE_SERVER=false .
+docker build -t devbox-systemd:full --build-arg SLIM_CODE_SERVER=false .
 
 # 自定义组件版本
-docker build -t devbox:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
+docker build -t devbox-systemd:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
   --build-arg PYTHON_VERSION=3.12.14 \
   --build-arg NODE_VERSION=22.23.2 \
   --build-arg JDK_VERSION=21.0.12.1 \
@@ -254,20 +255,23 @@ CODE_SERVER_VERSION=4.135.0 SHA256: f87d0d49c6c0a59d41214c9510f506e4123991f2d27b
 
 ```
 .
-├── Dockerfile               # 多阶段构建
+├── Dockerfile               # 多阶段构建（base: debian:13-slim）
 ├── docker-compose.yml       # 编排（端口 3443 → 8443）
 ├── .dockerignore
+├── .github/                 # GitHub Actions / Issue / PR 模板
 ├── .gitignore
 ├── systemd/
 │   ├── code-server.service  # systemd 单元（以 root 运行，HOME=/home/coder）
+│   ├── fix-hostname.service # 修复 Debian Bug #853731
 │   ├── override.conf        # 单元覆盖
 │   └── mask-units.sh        # 屏蔽不适用的 systemd 单元
-├── config/
-│   ├── code-server-config.yaml       # code-server 全局配置模板
-│   ├── code-server-settings.json     # code-server 用户 settings.json 模板
-│   └── maven-settings.xml            # Maven 阿里云镜像配置模板
+├── config/                  # 用户级配置模板
+│   ├── code-server-config.yaml   # code-server 全局配置模板
+│   ├── code-server-settings.json # code-server 用户 settings.json 模板
+│   ├── code-server.env.template # code-server 环境变量模板
+│   └── maven-settings.xml        # Maven 阿里云镜像配置模板
 ├── scripts/
-│   ├── entrypoint.sh        # 密码处理 + hostname 同步 + coder 配置初始化 + exec systemd
+│   ├── entrypoint.sh        # hostname 同步 + coder 配置初始化 + exec systemd
 │   └── verify.sh            # 构建后冒烟测试
 ├── home/                    # coder 用户数据持久化（运行时自动创建，git 忽略）
 ├── workspace/               # 默认工作区（运行时自动创建，git 忽略）
@@ -281,19 +285,19 @@ CODE_SERVER_VERSION=4.135.0 SHA256: f87d0d49c6c0a59d41214c9510f506e4123991f2d27b
 
 ```bash
 # 进入容器
-docker exec -it devbox bash
+docker exec -it devbox-systemd bash
 
 # 查看 systemd 状态
-docker exec -it devbox systemctl list-units
+docker exec -it devbox-systemd systemctl list-units
 
 # 查看 code-server 状态
-docker exec -it devbox systemctl status code-server
+docker exec -it devbox-systemd systemctl status code-server
 
 # 查看日志
-docker exec -it devbox journalctl -u code-server -f
+docker exec -it devbox-systemd journalctl -u code-server -f
 
 # 重启 code-server
-docker exec -it devbox systemctl restart code-server
+docker exec -it devbox-systemd systemctl restart code-server
 ```
 
 ---
@@ -301,14 +305,14 @@ docker exec -it devbox systemctl restart code-server
 ## 镜像仓库
 
 ```
-crpi-itfr2l0fn5lzqol6.cn-chengdu.personal.cr.aliyuncs.com/giwu/devbox:latest
+crpi-itfr2l0fn5lzqol6.cn-chengdu.personal.cr.aliyuncs.com/giwu/devbox-systemd:latest
 ```
 
 ## 部署到其他机器（简化版）
 
 ```bash
 # 在目标机器上
-mkdir -p /opt/systemdbox && cd /opt/systemdbox
+mkdir -p /opt/devbox-systemd && cd /opt/devbox-systemd
 # 把项目文件（除 home/ workspace/）scp / git clone 过来
 docker compose up -d
 ```
@@ -333,6 +337,10 @@ docker compose up -d
   - 容器内 systemd 由 252 升至 257（与 build host 一致）
   - 镜像大小约 2 GB（v1.1.3 是 1.97 GB）
   - 所有组件版本、功能、修复（hostname/sudo/workspace）保持不变
+- **v1.2.1**
+  - **项目更名为 devbox-systemd**：本地 image name / compose service / container name / GitHub ACR tag 全部从 `devbox` 改为 `devbox-systemd`
+  - 容器内 hostname 保持 `devbox`（OS-level identity 不变）
+  - GitHub repo 仍为 `Jimu51/systemdbox`（仓库迁移到 `devbox-systemd` 需在 GitHub 网页手动操作）
 
 ---
 

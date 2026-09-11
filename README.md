@@ -1,14 +1,16 @@
-# devbox
+# devbox-systemd
 
-A Docker image that ships a full multi-language developer workstation:
+A Docker image that ships a full multi-language developer workstation
+with systemd as PID 1:
 
 | Component | Version | Notes |
 |---|---|---|
-| Base | `debian:12-slim` | |
+| Base | `debian:13-slim` (trixie) | systemd 257, glibc 2.41 |
 | Init | `systemd` (PID 1) | run as actual init system |
 | Python | **3.12.14** | built from source, `venv` / `pipx` / `poetry` / `pip-tools` preinstalled |
 | Node.js | **22.23.2** (Jod LTS) | `yarn`, `pnpm`, `typescript`, `tsx`, `corepack` enabled |
 | JDK | **Temurin 21.0.12.1+1** | `JAVA_HOME=/opt/jdk-21`, JDK only |
+| Maven | **3.9.9** | Aliyun mirror, `MAVEN_HOME=/opt/maven` |
 | code-server | **4.135.0** | official `.deb`, managed by `systemd` |
 
 All binaries are pinned by SHA-256; `Dockerfile` rebuilds fail loudly on mismatch.
@@ -21,13 +23,13 @@ All binaries are pinned by SHA-256; `Dockerfile` rebuilds fail loudly on mismatc
 
 ```bash
 docker run -d \
-  --name devbox \
+  --name devbox-systemd \
   --privileged \
   --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
   -p 3443:8443 \
   -e PASSWORD='changeme' \
-  devbox:latest
+  devbox-systemd:latest
 ```
 
 Open <http://localhost:3443> and log in with the password above.
@@ -41,8 +43,8 @@ PASSWORD='changeme' docker compose up -d
 ### access shell
 
 ```bash
-docker exec -it devbox bash
-docker exec -it devbox systemctl list-units
+docker exec -it devbox-systemd bash
+docker exec -it devbox-systemd systemctl list-units
 ```
 
 ---
@@ -71,7 +73,7 @@ remain harmless.
 | `PASSWORD` | plain-text password for code-server (hashed on container start) |
 | `HASHED_PASSWORD` | pre-computed argon2 hash (skips hashing) |
 | `SUDO_PASSWORD` / `HASHED_SUDO_PASSWORD` | sudo password inside the IDE |
-| `TZ` | timezone, defaults to `UTC` |
+| `TZ` | timezone, defaults to `Asia/Shanghai` |
 
 The entrypoint writes these into `/etc/code-server/code-server.env`, which
 the systemd unit sources via `EnvironmentFile=`.
@@ -84,6 +86,7 @@ the systemd unit sources via `EnvironmentFile=`.
 | `/etc/code-server/code-server.env` | generated runtime env |
 | `/etc/systemd/system/code-server.service` | systemd unit |
 | `/etc/systemd/system/code-server.service.d/override.conf` | restart policy |
+| `/etc/systemd/system/fix-hostname.service` | Debian Bug #853731 workaround |
 | `/home/coder/workspace` | default workspace mount point |
 
 ### Restart policy
@@ -96,7 +99,7 @@ the systemd unit sources via `EnvironmentFile=`.
 ## Verify the image
 
 ```bash
-./scripts/verify.sh             # CONTAINER=devbox ./scripts/verify.sh
+./scripts/verify.sh             # CONTAINER=devbox-systemd ./scripts/verify.sh
 ```
 
 Checks installed versions, `systemctl is-system-running`, code-server
@@ -107,11 +110,11 @@ service status, and the `/healthz` endpoint.
 ## Build
 
 ```bash
-docker build -t devbox:latest .
-# 完整版（含 code-server 内置 Copilot、Mermaid 等扩展）
-docker build -t devbox:full --build-arg SLIM_CODE_SERVER=false .
-# 自定义组件版本：
-docker build -t devbox:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
+docker build -t devbox-systemd:latest .
+# Full mode (keep all code-server built-in extensions, ~880 MB)
+docker build -t devbox-systemd:full --build-arg SLIM_CODE_SERVER=false .
+# Custom component versions:
+docker build -t devbox-systemd:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
   --build-arg PYTHON_VERSION=3.12.14 \
   --build-arg NODE_VERSION=22.23.2 \
   --build-arg JDK_VERSION=21.0.12.1 \
@@ -119,18 +122,18 @@ docker build -t devbox:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
   --build-arg CODE_SERVER_VERSION=4.135.0 .
 ```
 
-### Slim 模式（默认）
+### Slim mode (default)
 
 `SLIM_CODE_SERVER=true` 默认开启。镜像会移除以下内置扩展：
 
-| 扩展 | 节省 |
+| Extension | Saved |
 |---|---|
 | GitHub Copilot | ~360 MB |
 | Mermaid Markdown Features | ~63 MB |
 
 如需这些功能，可在 code-server 内手动安装。
 
-最终镜像大小：**~460 MB**（精简模式）/ **~880 MB**（完整模式）。
+最终镜像大小：**~475 MB**（精简模式）/ **~880 MB**（完整模式）。
 
 ---
 
@@ -141,12 +144,22 @@ docker build -t devbox:py3.12.14-node22.23.2-jdk21.0.12.1-cs4.135.0 \
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .dockerignore
+├── .github/
+│   ├── workflows/build-push.yml     # GH Actions → ACR
+│   ├── ISSUE_TEMPLATE/{bug,feature}_*.md
+│   └── PULL_REQUEST_TEMPLATE.md
 ├── systemd/
 │   ├── code-server.service
+│   ├── fix-hostname.service    # Debian Bug #853731 workaround
 │   ├── override.conf
 │   └── mask-units.sh
+├── config/                       # user-level config templates
+│   ├── code-server-config.yaml
+│   ├── code-server-settings.json
+│   ├── code-server.env.template
+│   └── maven-settings.xml
 ├── scripts/
-│   ├── entrypoint.sh        # env propagation, then exec systemd
-│   └── verify.sh            # post-build smoke test
+│   ├── entrypoint.sh            # hostname sync, env propagation, exec systemd
+│   └── verify.sh                # post-build smoke test
 └── README.md
 ```

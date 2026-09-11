@@ -18,9 +18,9 @@
 
 ## 🧪 测试
 
-- [ ] 本地 `docker build -t devbox:test .` 通过
+- [ ] 本地 `docker build -t devbox-systemd:test .` 通过
 - [ ] 本地 `docker compose up -d` 后 `/healthz` 返回 200
-- [ ] `CONTAINER=devbox ./scripts/verify.sh` 通过
+- [ ] `CONTAINER=devbox-systemd ./scripts/verify.sh` 通过
 - [ ] 浏览器登录 code-server 正常
 - [ ] `sudo` 在终端工作正常
 

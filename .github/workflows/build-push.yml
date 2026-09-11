@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: crpi-itfr2l0fn5lzqol6.cn-chengdu.personal.cr.aliyuncs.com
-  IMAGE_NAME: giwu/devbox
+  IMAGE_NAME: giwu/devbox-systemd
   PLATFORM: linux/amd64
 
 jobs:

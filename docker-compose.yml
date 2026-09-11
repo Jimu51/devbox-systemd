@@ -1,10 +1,10 @@
 # ============================================================
-# devbox 容器编排文件（docker compose v2 格式）
+# devbox-systemd 容器编排文件（docker compose v2 格式）
 # ============================================================
-name: devbox
+name: devbox-systemd
 
 services:
-  devbox:
+  devbox-systemd:
     build:
       context: .
       dockerfile: Dockerfile
@@ -15,8 +15,8 @@ services:
         JDK_VERSION: "21.0.12.1"
         JDK_BUILD: "1"
         CODE_SERVER_VERSION: "4.135.0"
-    image: devbox:latest
-    container_name: devbox
+    image: devbox-systemd:latest
+    container_name: devbox-systemd
     hostname: devbox
     # 必备：以特权模式运行并加入宿主机 cgroup namespace
     # 才能让 systemd 正常管理 PID 1、子进程与日志
@@ -50,7 +50,7 @@ services:
       #   export HASHED_PASSWORD='argon2id 哈希值'
       #
       # ⚠️ 都不设置时：code-server 自动生成随机密码并打印到日志
-      #   用 `docker logs devbox | grep -i password` 查找
+      #   用 `docker logs devbox-systemd | grep -i password` 查找
       # ---------------------------------------------------------------
       PASSWORD: "${PASSWORD:-}"
       HASHED_PASSWORD: "${HASHED_PASSWORD:-}"
