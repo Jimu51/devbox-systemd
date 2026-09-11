@@ -4,7 +4,7 @@
 
 | 组件 | 版本 | 备注 |
 |---|---|---|
-| 基础镜像 | `debian:12-slim` | |
+| 基础镜像 | `debian:13-slim` (trixie) | systemd 257、glibc 2.41 |
 | Init 系统 | `systemd`（PID 1） | 容器以真正的 init 运行 |
 | Python | **3.12.14** | 源码编译，预装 `venv` / `pipx` / `poetry` / `pip-tools` |
 | Node.js | **22.23.2**（Jod LTS） | `yarn`、`pnpm`、`typescript`、`tsx`、`corepack` |
@@ -327,6 +327,12 @@ docker compose up -d
   - 修复 `sudo: unable to resolve host devbox` 警告（注入 `devbox.localdomain` 到 `/etc/hosts`）
 - **v1.1.3**
   - 新增 `systemd/fix-hostname.service`，在 `systemd-hostnamed` 之前触发 `hostnamectl set-hostname`，彻底消除 journal 中的 `Hostname set to <debain>` 警告（[Debian Bug #853731](https://bugs.debian.org/853731)）
+- **v1.2.0**
+  - 基础镜像切换：`debian:12-slim` → `debian:13-slim` (trixie)
+  - 清华源同步切换到 trixie 仓库
+  - 容器内 systemd 由 252 升至 257（与 build host 一致）
+  - 镜像大小约 2 GB（v1.1.3 是 1.97 GB）
+  - 所有组件版本、功能、修复（hostname/sudo/workspace）保持不变
 
 ---
 

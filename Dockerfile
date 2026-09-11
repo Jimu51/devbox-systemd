@@ -26,7 +26,7 @@
 # ============================================================
 # 构建阶段：仅用于编译 Python
 # ============================================================
-FROM debian:12-slim AS builder
+FROM debian:13-slim AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12.14
@@ -42,13 +42,13 @@ RUN apt-get update \
 RUN cat > /etc/apt/sources.list.d/debian.sources <<'EOF'
 Types: deb
 URIs: https://mirrors.tuna.tsinghua.edu.cn/debian
-Suites: bookworm bookworm-updates
+Suites: trixie trixie-updates
 Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
 Types: deb
 URIs: https://mirrors.tuna.tsinghua.edu.cn/debian-security
-Suites: bookworm-security
+Suites: trixie-security
 Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 EOF
@@ -99,7 +99,7 @@ RUN set -eux; \
 # ============================================================
 # 运行阶段：最终镜像（无编译器、无 -dev 包）
 # ============================================================
-FROM debian:12-slim
+FROM debian:13-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND} \
@@ -143,13 +143,13 @@ RUN apt-get update \
 RUN cat > /etc/apt/sources.list.d/debian.sources <<'EOF'
 Types: deb
 URIs: https://mirrors.tuna.tsinghua.edu.cn/debian
-Suites: bookworm bookworm-updates
+Suites: trixie trixie-updates
 Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
 Types: deb
 URIs: https://mirrors.tuna.tsinghua.edu.cn/debian-security
-Suites: bookworm-security
+Suites: trixie-security
 Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 EOF
