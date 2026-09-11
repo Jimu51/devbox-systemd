@@ -11,6 +11,7 @@
 | JDK | **Temurin 21.0.12.1+1** | `JAVA_HOME=/opt/jdk-21`，仅 JDK |
 | Maven | **3.9.9** | 阿里云镜像，`MAVEN_HOME=/opt/maven` |
 | code-server | **4.135.0** | 官方 `.deb`，由 `systemd` 管理 |
+| `lsof` | **4.99.4+dfsg-2** | 系统诊断工具（查看进程打开的文件），已预装 |
 
 所有二进制通过 SHA-256 校验，不匹配则构建失败。
 

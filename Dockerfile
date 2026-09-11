@@ -185,7 +185,8 @@ RUN set -eux; \
         openssh-client \
         sudo \
         file \
-        procps; \
+        procps \
+        lsof; \
     rm -rf /var/lib/apt/lists/*; \
     sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen; \
     locale-gen; \

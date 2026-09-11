@@ -12,6 +12,7 @@ with systemd as PID 1:
 | JDK | **Temurin 21.0.12.1+1** | `JAVA_HOME=/opt/jdk-21`, JDK only |
 | Maven | **3.9.9** | Aliyun mirror, `MAVEN_HOME=/opt/maven` |
 | code-server | **4.135.0** | official `.deb`, managed by `systemd` |
+| `lsof` | **4.99.4+dfsg-2** | debug tool (open files), preinstalled |
 
 All binaries are pinned by SHA-256; `Dockerfile` rebuilds fail loudly on mismatch.
 
